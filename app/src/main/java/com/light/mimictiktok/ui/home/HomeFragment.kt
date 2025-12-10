@@ -11,10 +11,14 @@ import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.light.mimictiktok.data.db.AppDatabase
 import com.light.mimictiktok.data.preferences.PreferencesManager
+import com.light.mimictiktok.data.repository.LikeRepository
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
+import com.light.mimictiktok.player.PlayerPool
 import com.light.mimictiktok.util.ListLooper
+import com.light.mimictiktok.util.ThumbnailCache
+import com.light.mimictiktok.util.ThumbnailGenerator
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -22,6 +26,7 @@ class HomeFragment : Fragment() {
     private lateinit var adapter: VideoAdapter
     private lateinit var playerManager: PlayerManager
     private lateinit var repository: VideoRepository
+    private lateinit var likeRepository: LikeRepository
     private lateinit var viewModel: HomeViewModel
     private lateinit var thumbnailGenerator: ThumbnailGenerator
     private lateinit var thumbnailCache: ThumbnailCache
@@ -47,16 +52,23 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val context = requireContext()
-        playerManager = PlayerManager(context)
         val appDatabase = AppDatabase.getInstance(context)
         repository = VideoRepository(appDatabase.appDao())
+        likeRepository = LikeRepository(appDatabase.likeDao())
+        
+        val playerPool = PlayerPool(context, poolSize = 2)
+        playerManager = PlayerManager(playerPool, repository)
+        thumbnailGenerator = ThumbnailGenerator(context)
+        thumbnailCache = ThumbnailCache(context)
+        
         val preferencesManager = PreferencesManager(context)
         viewModel = HomeViewModel(repository, preferencesManager)
         
         adapter = VideoAdapter(
             playerManager = playerManager,
             thumbnailGenerator = thumbnailGenerator,
-            thumbnailCache = thumbnailCache
+            thumbnailCache = thumbnailCache,
+            likeRepository = likeRepository
         )
         
         setupRecyclerView()

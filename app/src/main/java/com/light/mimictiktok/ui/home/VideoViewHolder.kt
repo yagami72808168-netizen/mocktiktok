@@ -11,6 +11,8 @@ import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
 import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
+import com.light.mimictiktok.data.repository.LikeRepository
+import com.light.mimictiktok.ui.widgets.LikeButton
 import com.light.mimictiktok.util.ThumbnailCache
 import com.light.mimictiktok.util.ThumbnailGenerator
 import com.light.mimictiktok.util.ThumbnailResult
@@ -20,13 +22,16 @@ import java.util.concurrent.TimeUnit
 class VideoViewHolder(
     itemView: View,
     private val thumbnailGenerator: ThumbnailGenerator,
-    private val thumbnailCache: ThumbnailCache
+    private val thumbnailCache: ThumbnailCache,
+    private val likeRepository: LikeRepository? = null,
+    private val onLikeChanged: ((String) -> Unit)? = null
 ) : RecyclerView.ViewHolder(itemView) {
     private val playerView: PlayerView = itemView.findViewById(R.id.playerView)
     private val ivThumbnail: ImageView = itemView.findViewById(R.id.ivThumbnail)
     private val tvTitle: TextView = itemView.findViewById(R.id.tvTitle)
     private val tvDuration: TextView = itemView.findViewById(R.id.tvDuration)
     private val ivPlayPause: ImageView = itemView.findViewById(R.id.ivPlayPause)
+    private val likeButton: LikeButton = itemView.findViewById(R.id.likeButton)
     
     private var currentPlayer: ExoPlayer? = null
     private var playbackListener: Player.Listener? = null
@@ -37,6 +42,8 @@ class VideoViewHolder(
         itemView.setOnClickListener {
             togglePlayPause()
         }
+        
+        setupLikeButton()
     }
 
     fun bind(video: VideoEntity, player: ExoPlayer) {
@@ -60,6 +67,9 @@ class VideoViewHolder(
         
         // 加载缩略图
         loadThumbnail(video)
+        
+        // 加载点赞状态
+        loadLikeState(video)
     }
 
     fun unbind() {
@@ -220,5 +230,34 @@ class VideoViewHolder(
     private fun generateCacheKey(video: VideoEntity): String {
         val source = video.path
         return "${source}_480x800"
+    }
+
+    private fun setupLikeButton() {
+        likeButton.setOnLikeClickListener {
+            currentVideo?.let { video ->
+                viewHolderScope.launch {
+                    try {
+                        likeRepository?.toggleLike(video.id)
+                        onLikeChanged?.invoke(video.id)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadLikeState(video: VideoEntity) {
+        likeRepository?.let {
+            viewHolderScope.launch {
+                try {
+                    val isLiked = it.isVideoLiked(video.id)
+                    val likeCount = it.getLikeCount(video.id)
+                    likeButton.setLiked(isLiked, likeCount)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 }
