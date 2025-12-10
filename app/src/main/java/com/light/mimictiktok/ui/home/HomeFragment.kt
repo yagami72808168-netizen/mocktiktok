@@ -11,7 +11,10 @@ import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.light.mimictiktok.data.db.AppDatabase
 import com.light.mimictiktok.data.repository.VideoRepository
+import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
+import com.light.mimictiktok.util.ThumbnailCache
+import com.light.mimictiktok.util.ThumbnailGenerator
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -20,6 +23,8 @@ class HomeFragment : Fragment() {
     private lateinit var playerManager: PlayerManager
     private lateinit var repository: VideoRepository
     private lateinit var viewModel: HomeViewModel
+    private lateinit var thumbnailGenerator: ThumbnailGenerator
+    private lateinit var thumbnailCache: ThumbnailCache
     
     private var currentPosition: Int = -1
     private var isInitialLoad = true
@@ -42,12 +47,20 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val context = requireContext()
-        playerManager = PlayerManager(context)
-        val appDatabase = AppDatabase.getInstance(context)
-        repository = VideoRepository(appDatabase.appDao())
+        val appDependencies = AppContainer.get()
+        
+        playerManager = appDependencies.playerManager
+        repository = appDependencies.videoRepository
+        thumbnailGenerator = appDependencies.thumbnailGenerator
+        thumbnailCache = appDependencies.thumbnailCache
+        
         viewModel = HomeViewModel(repository)
         
-        adapter = VideoAdapter(playerManager)
+        adapter = VideoAdapter(
+            playerManager = playerManager,
+            thumbnailGenerator = thumbnailGenerator,
+            thumbnailCache = thumbnailCache
+        )
         
         setupRecyclerView()
         observeVideos()

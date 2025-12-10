@@ -5,9 +5,12 @@ import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
 import com.light.mimictiktok.data.db.VideoEntity
+import com.light.mimictiktok.data.repository.VideoRepository
 
-class PlayerManager(private val context: Context) {
-    private val playerPool = PlayerPool(context, poolSize = 3)
+class PlayerManager(
+    private val playerPool: PlayerPool,
+    private val videoRepository: VideoRepository
+) {
     private var currentPlayingPosition: Int = -1
     private var currentPlayer: ExoPlayer? = null
     private val playbackStateListeners = mutableMapOf<Int, Player.Listener>()
