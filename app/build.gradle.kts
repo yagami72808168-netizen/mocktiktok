@@ -43,6 +43,7 @@ android {
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.appcompat)
 
     // Lifecycle & ViewModel
@@ -78,6 +79,9 @@ dependencies {
 
     // Material Design
     implementation(libs.google.material)
+
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
 
     // Testing
     testImplementation(libs.junit)
