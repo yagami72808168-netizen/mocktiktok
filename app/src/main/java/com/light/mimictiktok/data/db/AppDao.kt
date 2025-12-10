@@ -63,4 +63,20 @@ interface AppDao {
     @Transaction
     @Query("SELECT * FROM playlists")
     fun getAllPlaylistsWithVideosFlow(): Flow<List<PlaylistWithVideos>>
+    
+    // Playback progress operations
+    @Query("SELECT * FROM playback_progress WHERE videoId = :videoId")
+    suspend fun getPlaybackProgress(videoId: String): PlaybackProgressEntity?
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaybackProgress(progress: PlaybackProgressEntity)
+    
+    @Query("UPDATE playback_progress SET progressMs = :progressMs, lastWatchedTime = :lastWatchedTime WHERE videoId = :videoId")
+    suspend fun updatePlaybackProgress(videoId: String, progressMs: Long, lastWatchedTime: Long)
+    
+    @Query("SELECT * FROM playback_progress ORDER BY lastWatchedTime DESC LIMIT :limit")
+    suspend fun getRecentWatchedVideos(limit: Int = 50): List<PlaybackProgressEntity>
+    
+    @Query("DELETE FROM playback_progress WHERE videoId = :videoId")
+    suspend fun deletePlaybackProgress(videoId: String)
 }

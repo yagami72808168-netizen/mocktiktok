@@ -10,8 +10,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [VideoEntity::class, PlaylistEntity::class, PlaylistVideoCrossRef::class],
-    version = 1,
+    entities = [
+        VideoEntity::class, 
+        PlaylistEntity::class, 
+        PlaylistVideoCrossRef::class,
+        PlaybackProgressEntity::class
+    ],
+    version = 2,  // Increment version since we added a new table
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

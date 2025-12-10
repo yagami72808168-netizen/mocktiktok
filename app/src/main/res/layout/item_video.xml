@@ -53,15 +53,29 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 播放暂停控制层 -->
+    <!-- 播放控制层 -->
+    <com.light.mimictiktok.ui.widgets.PlaybackControlView
+        android:id="@+id/playbackControlView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+        
+    <!-- 双击反馈动画层 -->
     <ImageView
-        android:id="@+id/ivPlayPause"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:layout_gravity="center"
-        android:src="@android:drawable/ic_media_pause"
-        android:alpha="0.7"
-        android:visibility="gone"
-        android:contentDescription="@string/play_pause" />
+        android:id="@+id/doubleTapLeft"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center_vertical|start"
+        android:src="@android:drawable/ic_media_previous"
+        android:alpha="0"
+        android:contentDescription="@string/rewind" />
+        
+    <ImageView
+        android:id="@+id/doubleTapRight"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center_vertical|end"
+        android:src="@android:drawable/ic_media_next"
+        android:alpha="0"
+        android:contentDescription="@string/fast_forward" />
 
 </FrameLayout>
