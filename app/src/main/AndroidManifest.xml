@@ -34,6 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <activity
+            android:name=".ui.import.PlaylistImportActivity"
+            android:exported="false"
+            android:label="Import Videos"
+            android:theme="@style/Theme.Mimictiktok" />
     </application>
 
 </manifest>
