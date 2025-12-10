@@ -11,22 +11,30 @@ import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.light.mimictiktok.data.db.AppDatabase
 import com.light.mimictiktok.data.repository.VideoRepository
-import com.light.mimictiktok.player.PlayerPool
+import com.light.mimictiktok.player.PlayerManager
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: VideoAdapter
-    private lateinit var playerPool: PlayerPool
+    private lateinit var playerManager: PlayerManager
     private lateinit var repository: VideoRepository
+    private lateinit var viewModel: HomeViewModel
+    
+    private var currentPosition: Int = -1
+    private var isInitialLoad = true
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         return RecyclerView(requireContext()).apply {
             recyclerView = this
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
     }
 
@@ -34,31 +42,71 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val context = requireContext()
-        playerPool = PlayerPool(context, poolSize = 2)
+        playerManager = PlayerManager(context)
         val appDatabase = AppDatabase.getInstance(context)
         repository = VideoRepository(appDatabase.appDao())
+        viewModel = HomeViewModel(repository)
         
-        adapter = VideoAdapter(context, playerPool, repository)
+        adapter = VideoAdapter(playerManager)
         
-        recyclerView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+        setupRecyclerView()
+        observeVideos()
+    }
+
+    private fun setupRecyclerView() {
+        val layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.VERTICAL, false)
+        recyclerView.layoutManager = layoutManager
         recyclerView.adapter = adapter
         
         val snapHelper = PagerSnapHelper()
         snapHelper.attachToRecyclerView(recyclerView)
         
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    val position = layoutManager.findFirstCompletelyVisibleItemPosition()
+                    if (position != RecyclerView.NO_POSITION && position != currentPosition) {
+                        currentPosition = position
+                        adapter.playVideoAtPosition(position)
+                    }
+                }
+            }
+        })
+    }
+
+    private fun observeVideos() {
         lifecycleScope.launch {
-            repository.getAllVideosFlow().collect { videos ->
+            viewModel.videos.collect { videos ->
                 adapter.updateData(videos)
-                if (videos.isNotEmpty()) {
+                
+                if (videos.isNotEmpty() && isInitialLoad) {
+                    isInitialLoad = false
                     val startIndex = Int.MAX_VALUE / 2 - (Int.MAX_VALUE / 2 % videos.size)
                     recyclerView.scrollToPosition(startIndex)
+                    
+                    recyclerView.post {
+                        currentPosition = startIndex
+                        adapter.playVideoAtPosition(startIndex)
+                    }
                 }
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        adapter.resumeCurrentVideo()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        adapter.pauseCurrentVideo()
+    }
+
     override fun onDestroyView() {
-        playerPool.releaseAll()
+        playerManager.releaseAll()
         super.onDestroyView()
     }
 
