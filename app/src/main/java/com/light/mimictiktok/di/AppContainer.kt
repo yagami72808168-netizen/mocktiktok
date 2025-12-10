@@ -2,6 +2,7 @@ package com.light.mimictiktok.di
 
 import android.content.Context
 import com.light.mimictiktok.data.db.AppDatabase
+import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.MediaRepository
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.player.PlayerPool
@@ -30,6 +31,7 @@ class AppDependencies(private val context: Context) {
     val mediaRepository: MediaRepository = MediaRepository(context, videoRepository)
     val playlistImporter: PlaylistImporter = PlaylistImporter(context, videoRepository)
     val playerPool: PlayerPool = PlayerPool(context, poolSize = 2)
+    val preferencesManager: PreferencesManager = PreferencesManager(context)
 
     fun cleanup() {
         playerPool.releaseAll()
