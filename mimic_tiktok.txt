@@ -1,0 +1,641 @@
+好 —— 我会给你一份 **面向 Codex（或任何自动化代码生成器）能直接执行的详尽实现规范与分步任务清单**。内容包含：架构概览、模块/类设计、Room 数据库设计、UI 布局草稿（XML 结构）、关键 Kotlin 样例实现（可直接用作模板）、手势与缩放实现策略、播放器复用（PlayerPool）实现、无限循环逻辑、收藏夹管理、点赞数模拟、性能/内存/权限注意点、测试与验收标准、以及建议的分工任务（可直接下发给 Codex）。我会尽量把每部分写成可以“直接复制+粘贴或生成”的形式，便于 Codex 去完成编码。
+
+---
+
+# 0 总体说明（目标）
+
+实现一个 Android 本地视频“TikTok 风”播放器，核心要点：
+
+* RecyclerView（全屏 item）+ ExoPlayer（复用播放器）实现上下滑动播放
+* 播放源基于手动选的播放列表 & 收藏夹 & 本地文件夹
+* 滑到底自动回到第一条（无限循环）
+* 沉浸模式（隐藏/显示 UI）
+* 双击（2 tap）局部放大，再双击还原；快速三击（3 taps）更大倍数；放大后可平移；双击在放大时还原
+* 长按点赞（模拟点赞数量逐步增长），右滑进入“收藏夹主页”
+* 支持搜索、收藏夹管理、导入导出
+* 使用 Room 做本地数据持久化
+
+语言与依赖（建议）
+
+* Kotlin + AndroidX（Fragment, ViewModel, LiveData）
+* ExoPlayer (com.google.android.exoplayer:exoplayer:2.xx.x)
+* Room (androidx.room)
+* Material Components
+* Coroutine（kotlinx-coroutines-android）
+* Glide 或 Coil（缩略图 / 封面）
+
+---
+
+# 1 项目结构（建议）
+
+```
+app/
+ ├─ src/main/java/com/yourapp/
+ │   ├─ ui/
+ │   │   ├─ MainActivity.kt
+ │   │   ├─ home/
+ │   │   │   ├─ HomeFragment.kt
+ │   │   │   ├─ VideoAdapter.kt
+ │   │   │   └─ VideoViewHolder.kt
+ │   │   ├─ collection/
+ │   │   │   ├─ CollectionFragment.kt
+ │   │   │   └─ CollectionDetailFragment.kt
+ │   │   └─ settings/
+ │   │       └─ SettingsFragment.kt
+ │   ├─ data/
+ │   │   ├─ db/
+ │   │   │   ├─ AppDatabase.kt
+ │   │   │   ├─ VideoEntity.kt
+ │   │   │   ├─ PlaylistEntity.kt
+ │   │   │   └─ Dao.kt
+ │   │   ├─ repository/
+ │   │   │   └─ VideoRepository.kt
+ │   │   └─ model/
+ │   │       └─ VideoModel.kt
+ │   ├─ player/
+ │   │   └─ PlayerPool.kt
+ │   ├─ util/
+ │   │   ├─ GestureUtil.kt
+ │   │   └─ MediaScanUtil.kt
+ │   └─ di/ (可选 Hilt 或手写提供)
+ └─ res/
+     ├─ layout/
+     └─ values/
+```
+
+---
+
+# 2 数据库（Room）设计
+
+## Entities
+
+```kotlin
+// VideoEntity.kt
+@Entity(tableName = "videos")
+data class VideoEntity(
+    @PrimaryKey val id: String, // 可用文件绝对路径或hash
+    val path: String,
+    val title: String?,
+    val description: String?,
+    val folder: String?,
+    val duration: Long,
+    val dateTaken: Long,
+    val size: Long,
+    val coverPath: String?, // 缩略图缓存路径
+    val isFavorite: Boolean = false,
+    val likeCount: Long = 0L
+)
+```
+
+```kotlin
+// PlaylistEntity.kt
+@Entity(tableName = "playlists")
+data class PlaylistEntity(
+    @PrimaryKey(autoGenerate = true) val playlistId: Long = 0,
+    val name: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(primaryKeys = ["playlistId","videoId"])
+data class PlaylistVideoCrossRef(
+    val playlistId: Long,
+    val videoId: String,
+    val orderIndex: Int = 0
+)
+```
+
+```kotlin
+// Dao.kt
+@Dao
+interface AppDao {
+  @Query("SELECT * FROM videos ORDER BY dateTaken DESC")
+  fun getAllVideosFlow(): Flow<List<VideoEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertVideos(vararg videos: VideoEntity)
+
+  @Query("SELECT * FROM videos WHERE id = :id")
+  suspend fun getVideo(id: String): VideoEntity?
+
+  @Update
+  suspend fun updateVideo(video: VideoEntity)
+
+  // playlist dao
+  @Insert
+  suspend fun insertPlaylist(pl: PlaylistEntity): Long
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCrossRef(ref: PlaylistVideoCrossRef)
+
+  @Transaction
+  @Query("SELECT * FROM playlists WHERE playlistId = :id")
+  suspend fun getPlaylistWithVideos(id: Long): PlaylistWithVideos
+
+  // 更多查询按需添加
+}
+```
+
+```kotlin
+// PlaylistWithVideos.kt
+data class PlaylistWithVideos(
+  @Embedded val playlist: PlaylistEntity,
+  @Relation(
+    parentColumn = "playlistId",
+    entityColumn = "id",
+    associateBy = Junction(
+      value = PlaylistVideoCrossRef::class,
+      parentColumn = "playlistId",
+      entityColumn = "videoId"
+    )
+  )
+  val videos: List<VideoEntity>
+)
+```
+
+---
+
+# 3 播放器复用（PlayerPool）—— 关键实现
+
+目标：避免每个 item 创建新的 ExoPlayer；复用少量播放器（1~3 个），切换绑定到当前 View。
+
+核心思路：
+
+* 维护若干 ExoPlayer（例如 2 个）在 PlayerPool 中
+* RecyclerView 的当前可见 item 绑定一个 player（主），下一个 item 预准备 mediaSource 但不绑定视图
+* 当滑动到下一项时，切换 player 绑定并开始播放
+* 在复用时要管理 player 的 playbackPosition、playWhenReady 等
+
+示例：
+
+```kotlin
+// PlayerPool.kt
+class PlayerPool(private val context: Context, poolSize: Int = 2) {
+    private val players = ArrayList<SimpleExoPlayer>()
+
+    init {
+        repeat(poolSize) {
+            val player = SimpleExoPlayer.Builder(context).build()
+            // 可配置audio attributes etc.
+            players.add(player)
+        }
+    }
+
+    fun acquirePlayerFor(position: Int): SimpleExoPlayer {
+        // 简单轮询或使用更复杂的 LRU 策略
+        return players[position % players.size]
+    }
+
+    fun release() {
+        players.forEach { it.release() }
+        players.clear()
+    }
+}
+```
+
+在 `VideoViewHolder` 中：
+
+```kotlin
+fun bind(video: VideoEntity, playerPool: PlayerPool) {
+    val player = playerPool.acquirePlayerFor(adapterPosition)
+    player.setMediaItem(MediaItem.fromUri(video.path))
+    player.prepare()
+    player.playWhenReady = true
+    playerView.player = player
+}
+```
+
+注意：在复用时，必须在 `onViewDetachedFromWindow` 中解除 `playerView.player = null` 并把 player 的 playbackPosition 保存到数据层（如需要）。
+
+---
+
+# 4 RecyclerView + Adapter + 无限循环实现
+
+**无限循环策略（两种）**
+
+1. Adapter 使用 `Int.MAX_VALUE` 的虚拟 itemCount，并通过 `position % videoList.size` 映射真实数据（需处理为空列表）。
+2. 更稳妥：让 adapter 的 itemCount = videoList.size，但在 `LinearLayoutManager` 上监听到底事件然后 `scrollToPosition(0)`；但这种会有视觉跳变。推荐方法 1（虚拟化） + 初始定位到中间位置以避免快速到边界。
+
+实现要点（方法1）：
+
+```kotlin
+class VideoAdapter(
+    private val pool: PlayerPool,
+    private val onItemAction: (VideoEntity, Action) -> Unit
+) : RecyclerView.Adapter<VideoViewHolder>() {
+
+    var data: List<VideoEntity> = emptyList()
+    override fun getItemCount(): Int {
+        if (data.isEmpty()) return 0
+        return Int.MAX_VALUE // 非常大的循环数
+    }
+
+    fun realPosition(position: Int) = if (data.isEmpty()) 0 else position % data.size
+
+    override fun onBindViewHolder(holder: VideoViewHolder, position: Int) {
+        val realPos = realPosition(position)
+        val video = data[realPos]
+        holder.bind(video, pool, realPos)
+    }
+
+    // 其它必要实现...
+}
+```
+
+**初始定位**
+在加载数据并设置 adapter 后：
+
+```kotlin
+val startIndex = if(adapter.data.isNotEmpty()) Int.MAX_VALUE/2 - (Int.MAX_VALUE/2 % adapter.data.size) else 0
+recyclerView.scrollToPosition(startIndex)
+```
+
+这样用户视觉上是无限循环。
+
+---
+
+# 5 VideoViewHolder 与布局（XML草稿）
+
+`item_video.xml`
+
+```xml
+<FrameLayout ... >
+    <com.google.android.exoplayer2.ui.PlayerView
+        android:id="@+id/playerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:use_controller="false"
+        app:resize_mode="zoom" />
+
+    <!-- 触摸拦截层，用于手势检测 -->
+    <View
+        android:id="@+id/gestureOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 右侧竖列按钮 -->
+    <LinearLayout
+        android:id="@+id/rightButtonColumn"
+        android:orientation="vertical"
+        android:layout_gravity="end|center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp">
+        <ImageButton android:id="@+id/btnLike" .../>
+        <TextView android:id="@+id/tvLikeCount" .../>
+        <ImageButton android:id="@+id/btnFavorite" .../>
+        <ImageButton android:id="@+id/btnMore" .../>
+    </LinearLayout>
+
+    <!-- 左下信息卡 -->
+    <LinearLayout
+        android:id="@+id/infoCard"
+        android:layout_gravity="bottom|start"
+        android:orientation="vertical"
+        android:layout_margin="16dp"
+        android:padding="12dp"
+        android:background="@drawable/rounded_semitransparent">
+        <TextView android:id="@+id/tvTitle" .../>
+        <TextView android:id="@+id/tvDesc" .../>
+    </LinearLayout>
+</FrameLayout>
+```
+
+`VideoViewHolder.kt` 重要方法：
+
+```kotlin
+class VideoViewHolder(
+    view: View,
+    private val gestureHandler: GestureHandler
+) : RecyclerView.ViewHolder(view) {
+    private val playerView: PlayerView = view.findViewById(R.id.playerView)
+    private val overlay: View = view.findViewById(R.id.gestureOverlay)
+    private val likeBtn: ImageButton = view.findViewById(R.id.btnLike)
+    private val tvLike: TextView = view.findViewById(R.id.tvLikeCount)
+    private lateinit var boundPlayer: SimpleExoPlayer
+
+    fun bind(video: VideoEntity, pool: PlayerPool, realPos: Int) {
+        // 绑定播放器
+        val player = pool.acquirePlayerFor(realPos)
+        boundPlayer = player
+        player.setMediaItem(MediaItem.fromUri(video.path))
+        player.prepare()
+        player.playWhenReady = true
+        playerView.player = player
+
+        // 显示数据
+        tvLike.text = formatLikes(video.likeCount)
+        // gesture overlay listener
+        overlay.setOnTouchListener { v, event ->
+            gestureHandler.onTouchEvent(event, this, video)
+            true
+        }
+
+        likeBtn.setOnLongClickListener {
+            // 长按点赞
+            // 1. 触发动画 2. 更新本地数据库 likeCount 增长（可用 ViewModel/Repository）
+            onLongLikeClicked(video)
+            true
+        }
+    }
+
+    fun unbind() {
+        playerView.player = null
+        // 可保存 player current pos if needed
+    }
+}
+```
+
+---
+
+# 6 手势处理（双击/三击/放大/平移/长按）
+
+采用 `GestureDetectorCompat` + `ScaleGestureDetector` + 自定义计时计数检测三击。
+
+核心要点：
+
+* `GestureDetector` 用来处理单击、双击、长按、快速多击
+* 记录 tap 时间戳数组来检测三击（例如在 400ms 窗口内）
+* 放大使用 `View` 的 `scaleX/scaleY` 与 `translationX/translationY`，以双击点为锚点
+* 放大后启用拖动（listen ACTION_MOVE），限制边界
+
+示例伪代码（关键逻辑）：
+
+```kotlin
+class GestureHandler(context: Context, val onDoubleTap: (x: Float, y: Float)->Unit, val onTripleTap: (x:Float,y:Float)->Unit) {
+    private val gesture = GestureDetectorCompat(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean { /* toggle play/pause */ }
+        override fun onDoubleTap(e: MotionEvent): Boolean { onDoubleTap(e.x,e.y); return true }
+        override fun onLongPress(e: MotionEvent) { /* long like */ }
+    })
+
+    private val tapTimes = ArrayDeque<Long>()
+    fun onTouchEvent(ev: MotionEvent, holder: VideoViewHolder, video: VideoEntity) {
+        gesture.onTouchEvent(ev)
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            val now = System.currentTimeMillis()
+            tapTimes.addLast(now)
+            while (tapTimes.isNotEmpty() && now - tapTimes.first > 400) tapTimes.removeFirst()
+            if (tapTimes.size >= 3) {
+                onTripleTap(ev.x, ev.y)
+                tapTimes.clear()
+            }
+        }
+        // handle scale / move if in zoom mode...
+    }
+}
+```
+
+放大与还原：
+
+* 双击：如果 currentScale == 1f 则 animate to 1.5f or 2f；否则 animate back to 1f
+* 三击：到更高倍率（例如 3f），注意限制最大值
+* 在放大时，允许拖动来查看不同区域（通过更改 translationX/Y）
+
+注意：由于使用 ExoPlayer 的 `PlayerView`，建议对 `playerView` 外部再包一层 `FrameLayout`，并对那层进行缩放与平移，以避免触发 PlayerView 的内部手势。
+
+---
+
+# 7 收藏夹 / 右滑用户主页实现要点
+
+* 收藏夹为 `PlaylistEntity + PlaylistVideoCrossRef`
+* 右滑：在 `HomeFragment` 上添加 `ItemTouchHelper` 或 `GestureDetector` 检测水平滑动，触发 `Fragment` 转场（`ActivityOptions` or `FragmentTransaction` with animation）
+* 详情页使用卡片布局展示封面（第一帧），标题，描述（默认两行，点击展开）
+* 卡片可拖拽（可选）用于重新排序（使用 `ItemTouchHelper`）
+
+在卡片点击时，触发 `MainActivity` 将 `RecyclerView` 滚动到对应真实位置（计算 realIndex），并关闭收藏夹页（或返回主界面同时跳到 position）。
+
+---
+
+# 8 喜欢（模拟点赞数）策略
+
+* 在 `VideoEntity` 中保存 `likeCount`
+* 初始 `likeCount` 可在插入视频时基于视频文件属性生成一些基数（例如随机 100~1000）
+* 当用户长按点赞时：
+
+  1. 动画飘心（UI）
+  2. 立刻本地更新 `VideoEntity.likeCount += random(1..3)` 并持久化 `Dao.updateVideo()`
+  3. 同时显示一个短暂的“正在喜欢”数字动画（每 200ms 增 1~2）
+* 为了“更真”的增长效果：用 Coroutine 每隔几秒对当前播放列表中的部分视频 `likeCount += random(0..2)`，但**不影响数据库写频率**（节流，写入前聚合变化）。
+
+---
+
+# 9 缩略图缓存与封面
+
+* 使用 Glide 或 Coil 来生成并缓存第一帧作为封面缩略图
+* 可在后台生成并存到 app 内部 cache 目录，`coverPath` 存储路径，插入 Room
+* 当显示卡片列表时优先展示 `coverPath`，若不存在再用 Glide 的 `frame` request 来即时获取
+
+示例：
+
+```kotlin
+Glide.with(context)
+  .asBitmap()
+  .load(Uri.fromFile(File(video.path)))
+  .frame(TimeUnit.SECONDS.toMicros(1))
+  .into(imageView)
+```
+
+---
+
+# 10 权限与媒体访问（兼容性）
+
+* Android 13+ 使用 `READ_MEDIA_VIDEO`
+* Android 6~12 使用 `READ_EXTERNAL_STORAGE`
+* 在 Manifest 中声明并在运行时请求
+* 对于 Android 11+（Scoped Storage），优先使用 `MediaStore` API 扫描视频
+
+`MediaScanUtil`：按需扫描特定目录或使用系统 picker 让用户多选视频（推荐使用 SAF / ACTION_OPEN_DOCUMENT for multi-select，以便不需要全盘读取权限）。
+
+---
+
+# 11 性能与内存注意点
+
+* PlayerPool 大小不宜太多（2~3），过多消耗内存
+* RecyclerView item 要尽量轻量，避免 bitmap 大量内存占用
+* 缩略图使用 Glide/Coil 的缓存策略
+* 对 DB 写操作做批量/节流（不要频繁写入 likeCount）
+* 在 `onPause` 时暂停播放器，`onResume` 恢复
+* 处理 Activity/Fragment 的生命周期防止内存泄露（释放 players）
+
+---
+
+# 12 构建依赖（示例 build.gradle）
+
+```gradle
+dependencies {
+    implementation "androidx.core:core-ktx:1.10.0"
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "com.google.android.material:material:1.9.0"
+    implementation "androidx.recyclerview:recyclerview:1.3.0"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.6.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.0"
+    implementation "com.google.android.exoplayer:exoplayer:2.21.0"
+    implementation "androidx.room:room-runtime:2.5.0"
+    kapt "androidx.room:room-compiler:2.5.0"
+    implementation "io.coil-kt:coil:2.3.0" // or glide
+}
+```
+
+---
+
+# 13 自动化任务清单（分步、可直接给 Codex 执行）
+
+我把任务拆成小步，每步附验收条件（Acceptance Criteria）。Codex 可以按序实现并提交 PR。
+
+## 任务 1：项目基础架构与依赖（小）
+
+* 创建 Android 项目，添加上述依赖
+* 创建包结构（ui, data, player, util）
+  **验收**：项目能构建，空的 MainActivity 启动无崩溃
+
+## 任务 2：Room Schema & Repository（小）
+
+* 实现 `VideoEntity`, `PlaylistEntity`, `Dao`, `AppDatabase`
+* 实现 `VideoRepository` 的基本方法：插入、查询、更新
+  **验收**：单元测试（或手动）插入一个 VideoEntity 后能查询到记录
+
+## 任务 3：Media Picker 与播放列表导入（中）
+
+* 实现从系统文件选择多个视频（SAF 或 ACTION_OPEN_DOCUMENT_MULTIPLE）
+* 将选择的视频 metadata (duration/size/date) 读取并插入 DB
+* 成功创建播放列表（playlist）
+  **验收**：从 picker 选中 3 个视频后，DB 中有 3 条记录，播放列表可被创建
+
+## 任务 4：PlayerPool 与 RecyclerView 基础（中）
+
+* 实现 `PlayerPool`（2 players）
+* 实现 `VideoAdapter` + `VideoViewHolder` 加载 `item_video.xml`
+* RecyclerView 使用 `LinearLayoutManager`（竖向）+ `PagerSnapHelper`
+* 在页面加载播放第一条
+  **验收**：滑动时下一项播放，且视频能自动播放/暂停
+
+## 任务 5：无限循环与初始定位（中）
+
+* Adapter 使用 Int.MAX_VALUE 映射真实数据，并定位到中点
+  **验收**：连续滑动到“看似”末尾后依然能继续往下滑且循环播放
+
+## 任务 6：手势交互（双击/三击/长按/放大）与动画（中）
+
+* 实现 `GestureHandler`，双击放大/还原、三击放更大、长按点赞并触发动画
+* 在放大时支持平移（限制边界）
+  **验收**：双击放大平滑，双击还原；三击放更大；长按触发点赞动画并更新 UI 上的数字
+
+## 任务 7：收藏夹管理 & 右滑进入主页（中）
+
+* 实现 CollectionFragment / CollectionDetailFragment
+* 实现右滑手势从主页面进入收藏夹页（带转场动画）
+* 点击卡片跳转到对应视频
+  **验收**：在收藏夹点击某个视频后主页面滚动到目标视频并播放
+
+## 任务 8：沉浸模式 & 顶部搜索（中）
+
+* 实现顶部搜索栏（过滤 DB 中视频/收藏夹）
+* 实现沉浸按钮隐藏/显示 UI（顶部/底部淡出动画）
+  **验收**：点击沉浸后状态栏/底部导航淡出，点击任意角落短暂显示
+
+## 任务 9：缩略图生成与缓存（小）
+
+* 后台生成第一帧并保存到 cache，保存路径到 video.coverPath
+  **验收**：卡片列表显示封面图片且加载迅速
+
+## 任务 10：设置页、权限与边界处理（小）
+
+* 实现 SettingsFragment（基本选项）
+* 实现运行时权限与 Android 13+ 兼容逻辑
+  **验收**：权限拒绝/允许处理合适，不崩溃
+
+## 任务 11：质量优化、测试与打包（中）
+
+* 性能测试（内存占用/掉帧）
+* 添加 LeakCanary（可选）
+* 最终打包与测试
+  **验收**：应用运行稳定，内存泄露最小
+
+---
+
+# 14 关键实现片段（Codex 可直接生成）
+
+我给出更完整的一段关键实现，Codex 可直接用作模板 — **RecyclerView + Adapter + PlayerPool + Binding**（Kotlin）：
+
+**PlayerPool.kt**
+
+```kotlin
+class PlayerPool(private val context: Context, poolSize: Int = 2) {
+    private val players = ArrayList<SimpleExoPlayer>()
+    init {
+        repeat(poolSize) {
+            val p = SimpleExoPlayer.Builder(context).build()
+            p.repeatMode = Player.REPEAT_MODE_OFF
+            players.add(p)
+        }
+    }
+    fun acquire(index: Int): SimpleExoPlayer {
+        return players[index % players.size]
+    }
+    fun releaseAll() {
+        players.forEach { it.release() }
+        players.clear()
+    }
+}
+```
+
+**VideoAdapter.kt**
+
+```kotlin
+class VideoAdapter(
+    private val context: Context,
+    private val pool: PlayerPool,
+    private val onLike: (VideoEntity) -> Unit
+) : RecyclerView.Adapter<VideoAdapter.VideoVH>() {
+
+    var data: List<VideoEntity> = emptyList()
+    override fun getItemCount(): Int = if (data.isEmpty()) 0 else Int.MAX_VALUE
+    private fun realPos(pos: Int) = data[pos % data.size]
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoVH {
+        val v = LayoutInflater.from(context).inflate(R.layout.item_video, parent, false)
+        return VideoVH(v)
+    }
+
+    override fun onBindViewHolder(holder: VideoVH, position: Int) {
+        val video = realPos(position)
+        holder.bind(video, pool.acquire(position), onLike)
+    }
+
+    inner class VideoVH(view: View) : RecyclerView.ViewHolder(view) {
+        private val playerView: PlayerView = view.findViewById(R.id.playerView)
+        private val overlay: View = view.findViewById(R.id.gestureOverlay)
+        private val likeTv: TextView = view.findViewById(R.id.tvLikeCount)
+        private var currentPlayer: SimpleExoPlayer? = null
+
+        fun bind(video: VideoEntity, player: SimpleExoPlayer, onLike: (VideoEntity) -> Unit) {
+            currentPlayer = player
+            val mediaItem = MediaItem.fromUri(Uri.parse(video.path))
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.playWhenReady = true
+            playerView.player = player
+            likeTv.text = video.likeCount.toString()
+
+            overlay.setOnTouchListener { _, ev ->
+                // delegate to GestureHandler (not shown here)
+                false
+            }
+            // long press like example:
+            likeTv.setOnLongClickListener {
+                onLike(video)
+                true
+            }
+        }
+
+        fun unbind() {
+            playerView.player = null
+            currentPlayer?.playWhenReady = false
+        }
+    }
+}
+```
+
+
+
+
