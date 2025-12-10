@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -40,15 +41,45 @@ android {
 }
 
 dependencies {
-
+    // Core Android
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+
+    // Lifecycle & ViewModel
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+
+    // Jetpack Compose
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+
+    // RecyclerView
+    implementation(libs.androidx.recyclerview)
+
+    // Room Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // ExoPlayer
+    implementation(libs.google.exoplayer)
+
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.core)
+
+    // Image Loading
+    implementation(libs.coil)
+    implementation(libs.coil.compose)
+
+    // Material Design
+    implementation(libs.google.material)
+
+    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
