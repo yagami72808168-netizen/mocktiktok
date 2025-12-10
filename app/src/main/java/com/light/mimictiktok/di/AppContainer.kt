@@ -2,6 +2,7 @@ package com.light.mimictiktok.di
 
 import android.content.Context
 import com.light.mimictiktok.data.db.AppDatabase
+import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.MediaRepository
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.player.PlayerPool
@@ -33,11 +34,7 @@ class AppDependencies(private val context: Context) {
     val mediaRepository: MediaRepository = MediaRepository(context, videoRepository)
     val playlistImporter: PlaylistImporter = PlaylistImporter(context, videoRepository)
     val playerPool: PlayerPool = PlayerPool(context, poolSize = 2)
-    
-    // 移除 @Singleton 注解，使用简单实例化
-    val thumbnailGenerator: ThumbnailGenerator = ThumbnailGenerator(context)
-    val thumbnailCache: ThumbnailCache = ThumbnailCache(context)
-    val playerManager: PlayerManager = PlayerManager(playerPool, videoRepository)
+    val preferencesManager: PreferencesManager = PreferencesManager(context)
 
     fun cleanup() {
         playerPool.releaseAll()

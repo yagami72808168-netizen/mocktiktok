@@ -10,11 +10,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.light.mimictiktok.data.db.AppDatabase
+import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
-import com.light.mimictiktok.util.ThumbnailCache
-import com.light.mimictiktok.util.ThumbnailGenerator
+import com.light.mimictiktok.util.ListLooper
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -47,14 +47,11 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val context = requireContext()
-        val appDependencies = AppContainer.get()
-        
-        playerManager = appDependencies.playerManager
-        repository = appDependencies.videoRepository
-        thumbnailGenerator = appDependencies.thumbnailGenerator
-        thumbnailCache = appDependencies.thumbnailCache
-        
-        viewModel = HomeViewModel(repository)
+        playerManager = PlayerManager(context)
+        val appDatabase = AppDatabase.getInstance(context)
+        repository = VideoRepository(appDatabase.appDao())
+        val preferencesManager = PreferencesManager(context)
+        viewModel = HomeViewModel(repository, preferencesManager)
         
         adapter = VideoAdapter(
             playerManager = playerManager,
@@ -64,6 +61,7 @@ class HomeFragment : Fragment() {
         
         setupRecyclerView()
         observeVideos()
+        observeInitialPosition()
     }
 
     private fun setupRecyclerView() {
@@ -86,6 +84,26 @@ class HomeFragment : Fragment() {
                     }
                 }
             }
+            
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                
+                val position = layoutManager.findFirstVisibleItemPosition()
+                if (position != RecyclerView.NO_POSITION) {
+                    val videos = viewModel.videos.value
+                    if (videos.isNotEmpty() && ListLooper.needsLoopReset(position, videos.size)) {
+                        val direction = if (dy > 0) 1 else -1
+                        val targetPosition = ListLooper.calculateSmoothLoopPosition(
+                            position, 
+                            videos.size, 
+                            direction
+                        )
+                        if (targetPosition != position) {
+                            recyclerView.scrollToPosition(targetPosition)
+                        }
+                    }
+                }
+            }
         })
     }
 
@@ -93,10 +111,21 @@ class HomeFragment : Fragment() {
         lifecycleScope.launch {
             viewModel.videos.collect { videos ->
                 adapter.updateData(videos)
-                
+            }
+        }
+    }
+
+    private fun observeInitialPosition() {
+        lifecycleScope.launch {
+            viewModel.startPosition.collect { savedPosition ->
+                val videos = viewModel.videos.value
                 if (videos.isNotEmpty() && isInitialLoad) {
                     isInitialLoad = false
-                    val startIndex = Int.MAX_VALUE / 2 - (Int.MAX_VALUE / 2 % videos.size)
+                    val startIndex = savedPosition?.let { position ->
+                        if (position < Int.MAX_VALUE) position
+                        else ListLooper.calculateStartVirtualPosition(videos.size)
+                    } ?: ListLooper.calculateStartVirtualPosition(videos.size)
+                    
                     recyclerView.scrollToPosition(startIndex)
                     
                     recyclerView.post {

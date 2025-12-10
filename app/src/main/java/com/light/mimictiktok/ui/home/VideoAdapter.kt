@@ -7,8 +7,7 @@ import com.google.android.exoplayer2.MediaItem
 import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
 import com.light.mimictiktok.player.PlayerManager
-import com.light.mimictiktok.util.ThumbnailGenerator
-import com.light.mimictiktok.util.ThumbnailCache
+import com.light.mimictiktok.util.ListLooper
 
 class VideoAdapter(
     private val playerManager: PlayerManager,
@@ -24,14 +23,14 @@ class VideoAdapter(
         notifyDataSetChanged()
     }
 
-    override fun getItemCount(): Int = if (data.isEmpty()) 0 else Int.MAX_VALUE
+    override fun getItemCount(): Int = ListLooper.getInfiniteCount(data.size)
 
     private fun getRealPosition(position: Int): Int {
-        return position % data.size
+        return ListLooper.mapToRealPosition(position, data.size)
     }
 
     private fun getVideo(position: Int): VideoEntity {
-        return data[getRealPosition(position)]
+        return data[ListLooper.mapToRealPosition(position, data.size)]
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoViewHolder {
