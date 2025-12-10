@@ -8,6 +8,8 @@ import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
 import com.light.mimictiktok.player.PlayerManager
 import com.light.mimictiktok.util.ListLooper
+import com.light.mimictiktok.util.ThumbnailGenerator
+import com.light.mimictiktok.util.ThumbnailCache
 
 class VideoAdapter(
     private val playerManager: PlayerManager,
