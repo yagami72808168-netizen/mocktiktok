@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">mimictiktok</string>
     <string name="play_pause">Play/Pause</string>
+    <string name="video_thumbnail">Video Thumbnail</string>
 </resources>

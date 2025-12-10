@@ -5,6 +5,16 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
+    <!-- 缩略图背景层 -->
+    <ImageView
+        android:id="@+id/ivThumbnail"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:alpha="0"
+        android:contentDescription="@string/video_thumbnail" />
+
+    <!-- 视频播放器 -->
     <com.google.android.exoplayer2.ui.PlayerView
         android:id="@+id/playerView"
         android:layout_width="match_parent"
@@ -14,6 +24,7 @@
         app:use_controller="false"
         app:surface_type="surface_view" />
 
+    <!-- 视频信息层 -->
     <LinearLayout
         android:id="@+id/videoInfo"
         android:layout_width="match_parent"
@@ -42,6 +53,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- 播放暂停控制层 -->
     <ImageView
         android:id="@+id/ivPlayPause"
         android:layout_width="80dp"

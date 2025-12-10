@@ -6,7 +6,10 @@ import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.MediaRepository
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.player.PlayerPool
+import com.light.mimictiktok.player.PlayerManager
 import com.light.mimictiktok.util.PlaylistImporter
+import com.light.mimictiktok.util.ThumbnailGenerator
+import com.light.mimictiktok.util.ThumbnailCache
 
 object AppContainer {
     private var instance: AppDependencies? = null

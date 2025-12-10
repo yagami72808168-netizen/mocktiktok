@@ -10,7 +10,9 @@ import com.light.mimictiktok.player.PlayerManager
 import com.light.mimictiktok.util.ListLooper
 
 class VideoAdapter(
-    private val playerManager: PlayerManager
+    private val playerManager: PlayerManager,
+    private val thumbnailGenerator: ThumbnailGenerator,
+    private val thumbnailCache: ThumbnailCache
 ) : RecyclerView.Adapter<VideoViewHolder>() {
     
     private var data: List<VideoEntity> = emptyList()
@@ -34,7 +36,12 @@ class VideoAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoViewHolder {
         val itemView = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_video, parent, false)
-        return VideoViewHolder(itemView)
+        
+        return VideoViewHolder(
+            itemView = itemView,
+            thumbnailGenerator = thumbnailGenerator,
+            thumbnailCache = thumbnailCache
+        )
     }
 
     override fun onBindViewHolder(holder: VideoViewHolder, position: Int) {
