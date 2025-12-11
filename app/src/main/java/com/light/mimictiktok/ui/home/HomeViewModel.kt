@@ -2,6 +2,7 @@ package com.light.mimictiktok.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.light.mimictiktok.data.db.VideoEntity
 import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.VideoRepository
@@ -24,10 +25,24 @@ class HomeViewModel(
     private val _startPosition = MutableStateFlow<Int?>(null)
     val startPosition: StateFlow<Int?> = _startPosition.asStateFlow()
 
+    private val _resizeMode = MutableStateFlow(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+    val resizeMode: StateFlow<Int> = _resizeMode.asStateFlow()
+
     init {
         loadVideos()
         observePreferences()
     }
+
+    fun toggleResizeMode() {
+        val current = _resizeMode.value
+        val next = when (current) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+        _resizeMode.value = next
+    }
+
 
     private fun loadVideos() {
         viewModelScope.launch {
