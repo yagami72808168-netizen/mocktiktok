@@ -49,9 +49,80 @@ class VideoViewHolder(
     private var brightnessLevel = 50
     private var videoDuration = 0L
 
+    private val scaleTransformationMatrix = ScaleTransformationMatrix()
+    private lateinit var scaleGestureDetector: ScaleGestureDetector
+    private lateinit var gestureDetector: GestureDetector
+    private var isZooming = false
+    
+    var onLongPressed: (() -> Unit)? = null
+
     init {
         setupGestureControl()
     }
+
+    private fun setupGestures() {
+        scaleGestureDetector = ScaleGestureDetector(itemView.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                isZooming = true
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val videoSurfaceView = playerView.videoSurfaceView as? TextureView
+                videoSurfaceView?.let { view ->
+                    scaleTransformationMatrix.setViewSize(view.width.toFloat(), view.height.toFloat())
+                    val matrix = scaleTransformationMatrix.onScale(detector.scaleFactor, detector.focusX, detector.focusY)
+                    view.setTransform(matrix)
+                }
+                return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                isZooming = false
+                val currentScale = scaleTransformationMatrix.getCurrentScale()
+                if (currentScale < 1.05f) {
+                     // Reset if scale is close to 1
+                     val videoSurfaceView = playerView.videoSurfaceView as? TextureView
+                     videoSurfaceView?.let { view ->
+                         view.setTransform(scaleTransformationMatrix.reset())
+                     }
+                }
+            }
+        })
+
+        gestureDetector = GestureDetector(itemView.context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                togglePlayPause()
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                currentVideo?.let { video ->
+                    val context = itemView.context
+                    val intent = FullscreenVideoActivity.newIntent(context, video.path)
+                    context.startActivity(intent)
+                }
+                return true
+            }
+            
+            override fun onLongPress(e: MotionEvent) {
+                onLongPressed?.invoke()
+            }
+            
+            override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+                if (scaleTransformationMatrix.getCurrentScale() > 1.05f) {
+                    val videoSurfaceView = playerView.videoSurfaceView as? TextureView
+                    videoSurfaceView?.let { view ->
+                        val matrix = scaleTransformationMatrix.onScroll(distanceX, distanceY)
+                        view.setTransform(matrix)
+                    }
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
 
     fun bind(video: VideoEntity, player: ExoPlayer) {
         currentPlayer = player
@@ -78,6 +149,10 @@ class VideoViewHolder(
         
         // 加载缩略图
         loadThumbnail(video)
+    }
+
+    fun setResizeMode(mode: Int) {
+        playerView.resizeMode = mode
     }
 
     fun unbind() {

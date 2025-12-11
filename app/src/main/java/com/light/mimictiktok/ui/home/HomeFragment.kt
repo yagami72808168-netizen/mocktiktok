@@ -14,10 +14,14 @@ import com.light.mimictiktok.data.preferences.PreferencesManager
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
+import com.light.mimictiktok.player.PlayerPool
 import com.light.mimictiktok.util.ListLooper
 import com.light.mimictiktok.util.ThumbnailGenerator
 import com.light.mimictiktok.util.ThumbnailCache
 import kotlinx.coroutines.launch
+
+import com.light.mimictiktok.util.ThumbnailCache
+import com.light.mimictiktok.util.ThumbnailGenerator
 
 class HomeFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
@@ -27,6 +31,7 @@ class HomeFragment : Fragment() {
     private lateinit var viewModel: HomeViewModel
     private lateinit var thumbnailGenerator: ThumbnailGenerator
     private lateinit var thumbnailCache: ThumbnailCache
+    private lateinit var playerPool: PlayerPool
     
     private var currentPosition: Int = -1
     private var isInitialLoad = true
@@ -57,15 +62,31 @@ class HomeFragment : Fragment() {
         repository = appContainer.videoRepository
         viewModel = HomeViewModel(repository, appContainer.preferencesManager)
         
+        thumbnailCache = ThumbnailCache(context)
+        thumbnailGenerator = ThumbnailGenerator(context)
+        
         adapter = VideoAdapter(
             playerManager = playerManager,
             thumbnailGenerator = thumbnailGenerator,
             thumbnailCache = thumbnailCache
         )
         
+        adapter.onVideoLongPressed = {
+            viewModel.toggleResizeMode()
+        }
+        
         setupRecyclerView()
         observeVideos()
         observeInitialPosition()
+        observeResizeMode()
+    }
+
+    private fun observeResizeMode() {
+        lifecycleScope.launch {
+            viewModel.resizeMode.collect { mode ->
+                adapter.setResizeMode(mode)
+            }
+        }
     }
 
     private fun setupRecyclerView() {

@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
 import com.light.mimictiktok.player.PlayerManager
@@ -19,9 +20,17 @@ class VideoAdapter(
     
     private var data: List<VideoEntity> = emptyList()
     private var currentPlayingPosition: Int = -1
+    private var currentResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+    
+    var onVideoLongPressed: (() -> Unit)? = null
 
     fun updateData(newData: List<VideoEntity>) {
         data = newData
+        notifyDataSetChanged()
+    }
+    
+    fun setResizeMode(mode: Int) {
+        currentResizeMode = mode
         notifyDataSetChanged()
     }
 
@@ -57,6 +66,10 @@ class VideoAdapter(
         }
         
         holder.bind(video, player)
+        holder.setResizeMode(currentResizeMode)
+        holder.onLongPressed = {
+            onVideoLongPressed?.invoke()
+        }
     }
 
     override fun onViewDetachedFromWindow(holder: VideoViewHolder) {
