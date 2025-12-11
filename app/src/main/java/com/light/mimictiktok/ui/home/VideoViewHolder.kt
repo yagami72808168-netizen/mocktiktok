@@ -28,7 +28,9 @@ import kotlin.math.min
 class VideoViewHolder(
     itemView: View,
     private val thumbnailGenerator: ThumbnailGenerator,
-    private val thumbnailCache: ThumbnailCache
+    private val thumbnailCache: ThumbnailCache,
+    private val likeRepository: LikeRepository? = null,
+    private val onLikeChanged: ((String) -> Unit)? = null
 ) : RecyclerView.ViewHolder(itemView) {
     private val playerView: PlayerView = itemView.findViewById(R.id.playerView)
     private val ivThumbnail: ImageView = itemView.findViewById(R.id.ivThumbnail)
@@ -149,6 +151,9 @@ class VideoViewHolder(
         
         // 加载缩略图
         loadThumbnail(video)
+        
+        // 加载点赞状态
+        loadLikeState(video)
     }
 
     fun setResizeMode(mode: Int) {

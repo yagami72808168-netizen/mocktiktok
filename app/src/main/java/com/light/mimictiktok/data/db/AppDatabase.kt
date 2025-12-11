@@ -10,12 +10,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [VideoEntity::class, PlaylistEntity::class, PlaylistVideoCrossRef::class],
-    version = 1,
+    entities = [VideoEntity::class, PlaylistEntity::class, PlaylistVideoCrossRef::class, LikeEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao
+    abstract fun likeDao(): LikeDao
 
     companion object {
         @Volatile

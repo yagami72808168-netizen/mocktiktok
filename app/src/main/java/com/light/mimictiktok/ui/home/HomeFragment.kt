@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.light.mimictiktok.data.db.AppDatabase
 import com.light.mimictiktok.data.preferences.PreferencesManager
+import com.light.mimictiktok.data.repository.LikeRepository
 import com.light.mimictiktok.data.repository.VideoRepository
 import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
@@ -28,6 +29,7 @@ class HomeFragment : Fragment() {
     private lateinit var adapter: VideoAdapter
     private lateinit var playerManager: PlayerManager
     private lateinit var repository: VideoRepository
+    private lateinit var likeRepository: LikeRepository
     private lateinit var viewModel: HomeViewModel
     private lateinit var thumbnailGenerator: ThumbnailGenerator
     private lateinit var thumbnailCache: ThumbnailCache
@@ -68,7 +70,8 @@ class HomeFragment : Fragment() {
         adapter = VideoAdapter(
             playerManager = playerManager,
             thumbnailGenerator = thumbnailGenerator,
-            thumbnailCache = thumbnailCache
+            thumbnailCache = thumbnailCache,
+            likeRepository = likeRepository
         )
         
         adapter.onVideoLongPressed = {

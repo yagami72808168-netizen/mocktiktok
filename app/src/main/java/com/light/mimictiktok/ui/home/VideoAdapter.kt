@@ -7,6 +7,7 @@ import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
+import com.light.mimictiktok.data.repository.LikeRepository
 import com.light.mimictiktok.player.PlayerManager
 import com.light.mimictiktok.util.ListLooper
 import com.light.mimictiktok.util.ThumbnailGenerator
@@ -15,7 +16,8 @@ import com.light.mimictiktok.util.ThumbnailCache
 class VideoAdapter(
     private val playerManager: PlayerManager,
     private val thumbnailGenerator: ThumbnailGenerator,
-    private val thumbnailCache: ThumbnailCache
+    private val thumbnailCache: ThumbnailCache,
+    private val likeRepository: LikeRepository? = null
 ) : RecyclerView.Adapter<VideoViewHolder>() {
     
     private var data: List<VideoEntity> = emptyList()
@@ -51,7 +53,11 @@ class VideoAdapter(
         return VideoViewHolder(
             itemView = itemView,
             thumbnailGenerator = thumbnailGenerator,
-            thumbnailCache = thumbnailCache
+            thumbnailCache = thumbnailCache,
+            likeRepository = likeRepository,
+            onLikeChanged = { videoId ->
+                // Trigger any necessary updates when like status changes
+            }
         )
     }
 
