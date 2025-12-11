@@ -37,6 +37,8 @@ class AppDependencies(private val context: Context) {
     val playlistImporter: PlaylistImporter = PlaylistImporter(context, videoRepository)
     val playerPool: PlayerPool = PlayerPool(context, poolSize = 2)
     val preferencesManager: PreferencesManager = PreferencesManager(context)
+    val thumbnailGenerator: ThumbnailGenerator = ThumbnailGenerator()
+    val thumbnailCache: ThumbnailCache = ThumbnailCache(context)
 
     fun cleanup() {
         playerPool.releaseAll()

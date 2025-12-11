@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import coil.transform.RoundedCornersTransformation
 import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.PlaybackParameters
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
 import com.light.mimictiktok.R
@@ -135,16 +136,8 @@ class VideoViewHolder(
         tvTitle.text = video.title ?: "Unknown"
         tvDuration.text = formatDuration(video.duration)
         
-        removePlaybackListener()
-        
-        playbackListener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                updatePlayPauseIcon(isPlaying)
-            }
-        }
-        player.addListener(playbackListener!!)
-        
-        updatePlayPauseIcon(player.isPlaying)
+        // Setup playback controls
+        setupPlaybackControlView(player, video)
         
         // 初始化手势覆盖层
         initGestureOverlay()
@@ -161,10 +154,8 @@ class VideoViewHolder(
     }
 
     fun unbind() {
-        removePlaybackListener()
-        playerView.player = null
-        currentPlayer = null
-        currentVideo = null
+        // Save playback progress before unbinding
+        savePlaybackProgress()
         
         // 移除手势覆盖层
         gestureOverlay?.let {
@@ -300,44 +291,110 @@ class VideoViewHolder(
         gestureOverlay?.showVolume(volumeLevel)
     }
 
+    private fun setupPlaybackControlView(player: ExoPlayer, video: VideoEntity) {
+        // Initialize control view with video info
+        playbackControlView.setTotalTime(video.duration)
+        playbackControlView.attachPlayer(player)
+        
+        // Setup player listeners for updates
+        removePlaybackListener()
+        playbackListener = player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playbackControlView.showControls() // Show controls on state change
+                if (isPlaying) {
+                    scheduleProgressUpdates(player)
+                }
+            }
+            
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> {
+                        // Player is ready, show initial controls
+                        playbackControlView.showControls()
+                        playbackControlView.setTotalTime(player.duration)
+                    }
+                    Player.STATE_BUFFERING -> {
+                        // Show buffer state
+                    }
+                    Player.STATE_ENDED -> {
+                        // Video ended - save final progress
+                        savePlaybackProgress()
+                    }
+                }
+            }
+            
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                // Update progress when seeking
+                updateProgress(player)
+            }
+            
+            override fun onRenderedFirstFrame() {
+                // Video started playing, fade out thumbnail
+                fadeOutThumbnail()
+            }
+        })
+        
+        // Show initial controls
+        playbackControlView.showControls()
+    }
+    
+    private fun scheduleProgressUpdates(player: ExoPlayer) {
+        val handler = Handler(Looper.getMainLooper())
+        val runnable = object : Runnable {
+            override fun run() {
+                if (player.isPlaying) {
+                    updateProgress(player)
+                    handler.postDelayed(this, 100) // Update every 100ms
+                }
+            }
+        }
+        handler.postDelayed(runnable, 100)
+        
+        // Store reference to cancel later if needed
+        itemView.tag = runnable
+    }
+    
+    private fun updateProgress(player: ExoPlayer) {
+        // Update playback control view with current progress
+        val duration = player.duration
+        val position = player.currentPosition
+        val buffered = player.bufferedPosition
+        
+        if (duration > 0) {
+            playbackControlView.updateProgress(position, duration)
+            playbackControlView.updateBufferProgress(buffered, duration)
+        }
+    }
+    
+    private fun savePlaybackProgress() {
+        currentVideo?.let { video ->
+            currentPlayer?.let { player ->
+                if (player.duration > 0) {
+                    // Cancel any existing progress update handlers
+                    (itemView.tag as? Runnable)?.let { runnable ->
+                        Handler(Looper.getMainLooper()).removeCallbacks(runnable)
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun fadeOutThumbnail() {
+        ivThumbnail.animate()
+            .alpha(0f)
+            .setDuration(500)
+            .start()
+    }
+    
     private fun removePlaybackListener() {
         playbackListener?.let { listener ->
             currentPlayer?.removeListener(listener)
         }
         playbackListener = null
-    }
-
-    private fun togglePlayPause() {
-        currentPlayer?.let { player ->
-            player.playWhenReady = !player.playWhenReady
-            updatePlayPauseIcon(player.playWhenReady)
-            showPlayPauseIcon()
-        }
-    }
-
-    private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        ivPlayPause.setImageResource(
-            if (isPlaying) android.R.drawable.ic_media_pause
-            else android.R.drawable.ic_media_play
-        )
-    }
-
-    private fun showPlayPauseIcon() {
-        ivPlayPause.visibility = View.VISIBLE
-        ivPlayPause.animate()
-            .alpha(1f)
-            .setDuration(200)
-            .withEndAction {
-                ivPlayPause.animate()
-                    .alpha(0f)
-                    .setDuration(300)
-                    .setStartDelay(500)
-                    .withEndAction {
-                        ivPlayPause.visibility = View.GONE
-                    }
-                    .start()
-            }
-            .start()
     }
 
     private fun formatDuration(durationMs: Long): String {
