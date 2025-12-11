@@ -1,6 +1,9 @@
 package com.light.mimictiktok.ui.home
 
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -11,11 +14,16 @@ import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
 import com.light.mimictiktok.R
 import com.light.mimictiktok.data.db.VideoEntity
+import com.light.mimictiktok.ui.widgets.GestureOverlay
+import com.light.mimictiktok.util.GestureDetector
+import com.light.mimictiktok.util.GestureListener
 import com.light.mimictiktok.util.ThumbnailCache
 import com.light.mimictiktok.util.ThumbnailGenerator
 import com.light.mimictiktok.util.ThumbnailResult
 import kotlinx.coroutines.*
 import java.util.concurrent.TimeUnit
+import kotlin.math.max
+import kotlin.math.min
 
 class VideoViewHolder(
     itemView: View,
@@ -27,22 +35,29 @@ class VideoViewHolder(
     private val tvTitle: TextView = itemView.findViewById(R.id.tvTitle)
     private val tvDuration: TextView = itemView.findViewById(R.id.tvDuration)
     private val ivPlayPause: ImageView = itemView.findViewById(R.id.ivPlayPause)
+    private val mainContainer: FrameLayout = itemView.findViewById(R.id.videoPlayerContainer)
     
     private var currentPlayer: ExoPlayer? = null
     private var playbackListener: Player.Listener? = null
     private var currentVideo: VideoEntity? = null
     private val viewHolderScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var gestureOverlay: GestureOverlay? = null
+    private var gestureDetector: GestureDetector? = null
+    
+    // 手势相关状态
+    private var volumeLevel = 50
+    private var brightnessLevel = 50
+    private var videoDuration = 0L
 
     init {
-        itemView.setOnClickListener {
-            togglePlayPause()
-        }
+        setupGestureControl()
     }
 
     fun bind(video: VideoEntity, player: ExoPlayer) {
         currentPlayer = player
         currentVideo = video
         playerView.player = player
+        videoDuration = video.duration
         
         tvTitle.text = video.title ?: "Unknown"
         tvDuration.text = formatDuration(video.duration)
@@ -58,6 +73,9 @@ class VideoViewHolder(
         
         updatePlayPauseIcon(player.isPlaying)
         
+        // 初始化手势覆盖层
+        initGestureOverlay()
+        
         // 加载缩略图
         loadThumbnail(video)
     }
@@ -68,11 +86,138 @@ class VideoViewHolder(
         currentPlayer = null
         currentVideo = null
         
+        // 移除手势覆盖层
+        gestureOverlay?.let {
+            mainContainer.removeView(it)
+            gestureOverlay = null
+        }
+        
+        // 移除手势监听器
+        gestureDetector?.detachFromView()
+        gestureDetector = null
+        
         // 取消协程任务
         viewHolderScope.cancel()
         
         // 重置缩略图
         ivThumbnail.setImageDrawable(null)
+    }
+    
+    private fun setupGestureControl() {
+        val gestureListener = object : GestureListener {
+            override fun onSingleTap() {
+                togglePlayPause()
+            }
+            
+            override fun onDoubleTap() {}
+            
+            override fun onDoubleTapLeft() {
+                fastRewind()
+            }
+            
+            override fun onDoubleTapRight() {
+                fastForward()
+            }
+            
+            override fun onHorizontalScroll(deltaX: Float, deltaY: Float, totalDeltaX: Float) {
+                seekVideoByGesture(totalDeltaX)
+            }
+            
+            override fun onVerticalScrollStart(isLeft: Boolean) {
+                // 初始化垂直滑动手势
+            }
+            
+            override fun onVerticalScroll(deltaY: Float, totalDeltaY: Float, isLeft: Boolean) {
+                val deltaPercent = (totalDeltaY / itemView.height * -100).toInt()
+                
+                if (isLeft) {
+                    adjustBrightness(deltaPercent)
+                } else {
+                    adjustVolume(deltaPercent)
+                }
+            }
+            
+            override fun onVerticalScrollEnd() {
+                gestureOverlay?.hideAllOverlays()
+            }
+            
+            override fun onFling(velocityX: Float, velocityY: Float) {}
+        }
+        
+        gestureDetector = GestureDetector(
+            context = itemView.context,
+            listener = gestureListener,
+            view = itemView
+        )
+        gestureDetector?.attachToView()
+    }
+    
+    private fun initGestureOverlay() {
+        if (gestureOverlay == null) {
+            gestureOverlay = GestureOverlay(itemView.context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            }
+            mainContainer.addView(gestureOverlay)
+        }
+    }
+    
+    private fun fastForward() {
+        currentPlayer?.let { player ->
+            val currentPosition = player.currentPosition
+            val newPosition = currentPosition + 10000
+            player.seekTo(min(newPosition, player.duration))
+            gestureOverlay?.showProgress(
+                player.currentPosition, 
+                player.duration, 
+                (player.currentPosition * 100 / player.duration).toInt()
+            )
+        }
+    }
+    
+    private fun fastRewind() {
+        currentPlayer?.let { player ->
+            val currentPosition = player.currentPosition
+            val newPosition = currentPosition - 10000
+            player.seekTo(max(0L, newPosition))
+            gestureOverlay?.showProgress(
+                player.currentPosition, 
+                player.duration, 
+                (player.currentPosition * 100 / player.duration).toInt()
+            )
+        }
+    }
+    
+    private fun seekVideoByGesture(totalDeltaX: Float) {
+        currentPlayer?.let { player ->
+            val duration = player.duration
+            if (duration <= 0) return
+            
+            val seekRatio = totalDeltaX / itemView.width
+            val seekTime = (duration * seekRatio * 0.3).toLong()
+            val newPosition = player.currentPosition + seekTime
+            
+            val boundedPosition = newPosition.coerceIn(0L, duration)
+            player.seekTo(boundedPosition)
+            
+            gestureOverlay?.showProgress(
+                boundedPosition,
+                duration,
+                (boundedPosition * 100 / duration).toInt()
+            )
+        }
+    }
+    
+    private fun adjustBrightness(deltaPercent: Int) {
+        brightnessLevel = max(0, min(100, brightnessLevel - deltaPercent))
+        gestureOverlay?.showBrightness(brightnessLevel)
+    }
+    
+    private fun adjustVolume(deltaPercent: Int) {
+        volumeLevel = max(0, min(100, volumeLevel - deltaPercent))
+        gestureOverlay?.showVolume(volumeLevel)
     }
 
     private fun removePlaybackListener() {
