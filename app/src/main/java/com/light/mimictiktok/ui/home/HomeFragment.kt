@@ -16,6 +16,8 @@ import com.light.mimictiktok.di.AppContainer
 import com.light.mimictiktok.player.PlayerManager
 import com.light.mimictiktok.player.PlayerPool
 import com.light.mimictiktok.util.ListLooper
+import com.light.mimictiktok.util.ThumbnailGenerator
+import com.light.mimictiktok.util.ThumbnailCache
 import kotlinx.coroutines.launch
 
 import com.light.mimictiktok.util.ThumbnailCache
@@ -52,14 +54,13 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val context = requireContext()
-        val appDatabase = AppDatabase.getInstance(context)
-        repository = VideoRepository(appDatabase.appDao())
+        val appContainer = AppContainer.get()
         
-        playerPool = PlayerPool(context)
-        playerManager = PlayerManager(playerPool, repository)
-        
-        val preferencesManager = PreferencesManager(context)
-        viewModel = HomeViewModel(repository, preferencesManager)
+        playerManager = PlayerManager(appContainer.playerPool, appContainer.videoRepository)
+        thumbnailGenerator = ThumbnailGenerator(context)
+        thumbnailCache = ThumbnailCache(context)
+        repository = appContainer.videoRepository
+        viewModel = HomeViewModel(repository, appContainer.preferencesManager)
         
         thumbnailCache = ThumbnailCache(context)
         thumbnailGenerator = ThumbnailGenerator(context)
