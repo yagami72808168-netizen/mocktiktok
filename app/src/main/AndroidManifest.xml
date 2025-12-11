@@ -40,6 +40,12 @@
             android:exported="false"
             android:label="Import Videos"
             android:theme="@style/Theme.Mimictiktok" />
+
+        <activity
+            android:name=".ui.fullscreen.FullscreenVideoActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize"
+            android:theme="@style/Theme.Mimictiktok" />
     </application>
 
 </manifest>

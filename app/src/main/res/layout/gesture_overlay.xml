@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 中心区域（进度） -->
+    <FrameLayout
+        android:id="@+id/gestureCenterContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:alpha="0">
+        
+        <LinearLayout
+            android:id="@+id/progressContainer"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@android:drawable/screen_background_dark_transparent"
+            android:padding="16dp">
+            
+            <TextView
+                android:id="@+id/tvProgressLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="进度"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+                
+            <ProgressBar
+                android:id="@+id/progressBarHorizontal"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_marginTop="8dp"
+                android:max="100" />
+                
+            <TextView
+                android:id="@+id/tvProgressValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="0%"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 左侧区域（亮度） -->
+    <FrameLayout
+        android:id="@+id/brightnessContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="32dp"
+        android:alpha="0">
+        
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@android:drawable/screen_background_dark_transparent"
+            android:padding="16dp">
+            
+            <ImageView
+                android:id="@+id/ivBrightnessIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@android:drawable/ic_menu_manage"
+                app:tint="@android:color/white"
+                android:layout_gravity="center_horizontal" />
+                
+            <ProgressBar
+                android:id="@+id/progressBarBrightness"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="100dp"
+                android:layout_height="8dp"
+                android:layout_marginTop="12dp"
+                android:max="100"
+                android:progress="50" />
+                
+            <TextView
+                android:id="@+id/tvBrightnessValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="50%"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 右侧区域（音量） -->
+    <FrameLayout
+        android:id="@+id/volumeContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="32dp"
+        android:alpha="0">
+        
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@android:drawable/screen_background_dark_transparent"
+            android:padding="16dp">
+            
+            <ImageView
+                android:id="@+id/ivVolumeIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@android:drawable/ic_lock_silent_mode_off"
+                app:tint="@android:color/white"
+                android:layout_gravity="center_horizontal" />
+                
+            <ProgressBar
+                android:id="@+id/progressBarVolume"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="100dp"
+                android:layout_height="8dp"
+                android:layout_marginTop="12dp"
+                android:max="100"
+                android:progress="50" />
+                
+            <TextView
+                android:id="@+id/tvVolumeValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="50%"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+</FrameLayout>

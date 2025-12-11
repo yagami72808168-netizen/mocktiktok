@@ -60,4 +60,6 @@
     <string name="speed_125x">1.25x</string>
     <string name="speed_15x">1.5x</string>
     <string name="speed_2x">2x</string>
+    <string name="video_thumbnail">Video Thumbnail</string>
+    <string name="like_button">Like</string>
 </resources>

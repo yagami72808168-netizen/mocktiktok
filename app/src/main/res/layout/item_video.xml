@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/videoPlayerContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black">
@@ -22,7 +23,7 @@
         app:resize_mode="fit"
         app:show_buffering="when_playing"
         app:use_controller="false"
-        app:surface_type="surface_view" />
+        app:surface_type="texture_view" />
 
     <!-- 视频信息层 -->
     <LinearLayout
@@ -77,5 +78,13 @@
         android:src="@android:drawable/ic_media_next"
         android:alpha="0"
         android:contentDescription="@string/fast_forward" />
+
+    <!-- 点赞按钮层 -->
+    <com.light.mimictiktok.ui.widgets.LikeButton
+        android:id="@+id/likeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp" />
 
 </FrameLayout>
